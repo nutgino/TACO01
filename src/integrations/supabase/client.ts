@@ -13,6 +13,9 @@ export const supabase = (supabaseUrl && supabaseAnonKey)
             from: () => ({
                 upload: async () => ({ error: new Error("Supabase credentials missing. Please check your .env file.") })
             })
+        },
+        auth: {
+            getUser: async () => ({ data: { user: null }, error: new Error("Supabase credentials missing. Please check your .env file.") })
         }
     } as any;
 

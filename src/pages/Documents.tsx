@@ -69,6 +69,13 @@ export default function Documents() {
     fileInputRef.current?.click();
   };
 
+  const toBase64 = (file: File) => new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = error => reject(error);
+  });
+
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -78,31 +85,62 @@ export default function Documents() {
       return;
     }
 
-    setIsUploading(true);
-    try {
-      const fileName = `${Date.now()}_${file.name}`;
-      const { data, error } = await supabase.storage
-        .from("documents")
-        .upload(fileName, file);
+    // ยังใช้ limit size ได้ตามเดิม
+    if (file.size > 3 * 1024 * 1024) {
+      toast.error("ขนาดไฟล์ต้องไม่เกิน 3MB");
+      return;
+    }
 
-      if (error) throw error;
+    setIsUploading(true);
+
+    try {
+      // TODO: ใช้ user_id จากระบบ auth จริง
+      const userId = "00000000-0000-0000-0000-000000000000";
+
+      // ✅ ใช้ FormData แทน JSON
+      const formData = new FormData();
+      formData.append("file", file);       // ชื่อ key ต้องตรงกับ t.File() -> "file"
+      formData.append("user_id", userId);  // ชื่อ key ต้องตรงกับ "user_id"
+
+      console.log("Uploading file:", file.name, "Size:", file.size);
+
+      const response = await fetch(
+        "https://taco-backend-pi.vercel.app/api/documents/upload",
+        {
+          method: "POST",
+          body: formData, // ❗️ห้ามใส่ headers 'Content-Type' เอง
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = `Upload failed with status ${response.status}`;
+
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.error || errorJson.message || errorMessage;
+        } catch (e) {
+          console.error("Failed to parse error response as JSON:", errorText);
+          errorMessage += `: ${errorText.slice(0, 100)}`;
+        }
+
+        throw new Error(errorMessage);
+      }
 
       toast.success("อัปโหลดเอกสารสำเร็จ");
 
-      // Simulate adding to the list
       const newDoc = {
         id: documents.length + 1,
         name: file.name,
-        status: "approved", // Default status for new upload
-        uploadDate: new Date().toISOString().split('T')[0],
+        status: "approved",
+        uploadDate: new Date().toISOString().split("T")[0],
         issues: 0,
       };
 
       setDocuments([newDoc, ...documents]);
       setSelectedDoc(newDoc);
-
     } catch (error: any) {
-      console.error("Upload error:", error);
+      console.error("Upload error details:", error);
       toast.error(`การอัปโหลดล้มเหลว: ${error.message}`);
     } finally {
       setIsUploading(false);
@@ -191,10 +229,10 @@ export default function Documents() {
             </div>
           </Card>
 
-          
 
-          
-          
+
+
+
         </div>
       </div>
     </div>
